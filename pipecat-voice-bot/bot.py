@@ -32,7 +32,7 @@ logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
 # Firebase initialization for storing transcription data
-FILES_DIR = "saved_files"  # Directory to save audio files
+FILES_DIR = "saved_files"  # Directory to save audio files (create this empty folder in your working directory) 
 cred = credentials.Certificate(os.getenv("CRED_PATH"))  # Firebase credentials path
 firebase_admin.initialize_app(cred)  # Initialize Firebase app
 db = firestore.client()  # Firestore client for database interactions
