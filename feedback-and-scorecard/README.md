@@ -48,22 +48,7 @@ The app is built using **FastAPI** for fast web service development, **LangGraph
    
 2. **Text Splitting**: The transcript is split into smaller chunks for easier processing using the `CharacterTextSplitter` class from LangChain.
 
-3. **Feedback Scoring**: Each chunk of the transcript is analyzed by a series of feedback evaluation functions. These functions assess different aspects of the interaction, such as:
-   - **Empathy**
-   - **Clarity and Conciseness**
-   - **Grammar and Language**
-   - **Listening Score**
-   - **Problem Resolution Effectiveness**
-   - **Personalization**
-   - **Conflict Management**
-   - **Response Time**
-   - **Customer Satisfaction**
-   - **Positive Sentiment Score**
-   - **Structure and Flow**
-   - **Stuttering Words**
-   - **Active Listening Skills**
-   - **Rapport Building**
-   - **Engagement**
+3. **Feedback Scoring**: Each chunk of the transcript is analyzed by a series of feedback evaluation functions. These functions assess different aspects of the interaction, such as: Empathy, Clarity and Conciseness, Grammar and Language, Listening Score, etc.
 
    These functions are executed in parallel using **LangGraph** to evaluate the feedback metrics.
 
