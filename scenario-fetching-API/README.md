@@ -191,7 +191,6 @@ This variable is used by the FastAPI application to locate the Firebase credenti
 ## Conclusion
 
 This project demonstrates how to securely manage Firebase credentials using Docker secrets while building and deploying a FastAPI application. By following these steps, you ensure that sensitive information like your Firebase credentials is not exposed, and you can easily deploy your application in a Dockerized environment.
-```
 
 ### Explanation:
 
@@ -199,4 +198,3 @@ This project demonstrates how to securely manage Firebase credentials using Dock
 - **Docker Commands**: I outlined the process for initializing Docker Swarm, creating secrets, building the Docker image, and running the container using `docker-compose` or Docker Swarm.
 - **Endpoints and Application Flow**: I included descriptions of the FastAPI endpoints to clarify what each one does.
   
-With this `README.md`, a developer can easily follow the steps to set up the environment, build the container, and securely manage Firebase credentials. Let me know if you'd like any more adjustments!
