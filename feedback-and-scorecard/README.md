@@ -1,4 +1,3 @@
-```markdown
 # Feedback & Scorecard Generation API
 
 This repository contains a **Feedback App** that generates customer service scorecards based on input transcripts. The app uses technologies like **FastAPI**, **LangGraph**, and **OpenAI's RAG (Retrieval-Augmented Generation)**. It is containerized using **Docker** and orchestrated using **Docker Compose**. The application also securely manages Firebase database credentials using **Docker Swarm secrets**.
