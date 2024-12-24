@@ -52,7 +52,7 @@ To securely handle the Firebase credentials, we’ll use Docker Secrets. Follow 
    Use the following command to create a Docker secret from your Firebase JSON credentials file. Replace `google_credentials.json` with the actual path to your Firebase credentials file.
 
    ```bash
-   docker secret create my_secret ./google_credentials.json
+   docker secret create my_secret ./firebase_credentials.json
    ```
 
 3. **Verify the Docker Secret**:
@@ -68,7 +68,7 @@ To securely handle the Firebase credentials, we’ll use Docker Secrets. Follow 
    In the `.env` file, define the path of the Firebase credentials file that Docker secrets will mount. Here's an example of the `.env` file:
 
    ```
-   CRED_PATH=/run/secrets/my_secret
+   CRED_PATH=path/of/firebase/credential/file
    ```
 
    The `.env` file allows FastAPI to reference the correct path for Firebase credentials when it starts inside the container.
@@ -83,12 +83,10 @@ services:
   fastapi-app:
     image: fastapi-firebase-app:latest
     build: .
-    environment:
-      - CRED_PATH=/run/secrets/my_secret
     secrets:
       - my_secret
     ports:
-      - "8080:8080"
+      - "8000:8000"
     restart: unless-stopped
 
 secrets:
@@ -125,10 +123,10 @@ This command will build the Docker container (if not already built) and start th
 If you're using Docker Swarm, you can deploy the service like this:
 
 ```bash
-docker service create --name fastapi-firebase-service --secret my_secret -p 8080:8080 [image-name]
+docker service create --name fastapi-firebase-service --secret my_secret -p 8000:8000 [image-name]
 ```
 
-This command deploys the application with Docker Swarm, making the app accessible on port 8080.
+This command deploys the application with Docker Swarm, making the app accessible on port 8000.
 
 ## Application Endpoints
 
@@ -181,7 +179,7 @@ Fetches a list of all scenario IDs.
 The `.env` file should be placed in the root of your project and contains:
 
 ```bash
-CRED_PATH=/run/secrets/my_secret
+CRED_PATH=path/of/firebase/credential/file
 ```
 
 This variable is used by the FastAPI application to locate the Firebase credentials stored securely as a Docker secret.
