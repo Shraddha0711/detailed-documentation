@@ -1,0 +1,77 @@
+# Version of the Docker Compose file format
+# "3.8" is used here. This version supports features such as secrets, health checks, and more.
+version: "3.8"
+
+# Define the services in your application.
+# A service is a container running a particular image or built from a Dockerfile.
+services:
+  # Define the service for your application
+  my-app:
+    # The image that this service will use
+    # The image is named 'feedback-app-4'
+    image: feedback-app-4
+    
+    # Define the secrets to be used by this service
+    # Here, the 'db_credential' secret is being referenced. 
+    # It will be available to the service as an environment variable or file.
+    secrets:
+      - db_credential
+    
+# Define external secrets that can be used across multiple services.
+# In this case, 'db_credential' is an external secret that must be created
+# in your Docker swarm or passed manually. This secret is typically used for sensitive information
+# like database credentials.
+secrets:
+  db_credential:
+    # Indicates that the secret is managed outside the Compose file
+    # It must be created before running the Compose setup.
+    external: true
+
+# The section below is commented out and provides an example of how to define a PostgreSQL database
+# and a service that depends on it. This section is not currently active, but can be used if a database is needed.
+#
+# The 'depends_on' option ensures that the database service is fully up and healthy before starting the application service.
+
+#   depends_on:
+#     db:
+#       # Ensures the application waits for the database to be healthy before starting
+#       condition: service_healthy
+#   db:
+#     # PostgreSQL database image
+#     image: postgres
+#     # Ensures the database container always restarts if it stops
+#     restart: always
+#     # Run the PostgreSQL container as the 'postgres' user
+#     user: postgres
+#     # Specifies which secret the database should use for the password
+#     secrets:
+#       - db-password
+#     # Use a volume to persist database data between container restarts
+#     volumes:
+#       - db-data:/var/lib/postgresql/data
+#     # Environment variables to configure the PostgreSQL database
+#     environment:
+#       - POSTGRES_DB=example
+#       # This points to the location of the password file to configure PostgreSQL
+#       - POSTGRES_PASSWORD_FILE=/run/secrets/db-password
+#     # Expose the PostgreSQL port (5432) to other services or the host
+#     expose:
+#       - 5432
+#     # Healthcheck to make sure the PostgreSQL service is ready before continuing
+#     healthcheck:
+#       # Command to test if the database is ready to accept connections
+#       test: [ "CMD", "pg_isready" ]
+#       # How often to run the healthcheck
+#       interval: 10s
+#       # How long to wait for the healthcheck to succeed
+#       timeout: 5s
+#       # How many retries before considering the service unhealthy
+#       retries: 5
+# volumes:
+#   # Volume definition for persisting PostgreSQL data
+#   db-data:
+# secrets:
+#   # Definition of the secret used for PostgreSQL password
+#   db-password:
+#     # The location of the file containing the password
+#     file: db/password.txt
