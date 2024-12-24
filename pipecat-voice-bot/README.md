@@ -4,7 +4,7 @@ This project sets up a Pipecat Bot application with FastAPI. The bot is designed
 
 ## Requirements
 
-- **Ubuntu** OS (Do not use Windows)
+- **Ubuntu** Linux (Do not use Windows)
 - Python 3.8+ 
 - FastAPI
 - `pip` for installing Python dependencies
