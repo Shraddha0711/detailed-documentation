@@ -27,7 +27,6 @@ Clone the repository to your local machine:
 
 ```bash
 git clone <repo-link>
-cd pipecat-bot
 ```
 
 ### 2. Install dependencies
