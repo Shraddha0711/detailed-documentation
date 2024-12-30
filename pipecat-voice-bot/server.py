@@ -44,10 +44,12 @@ REQUIRED_ENV_VARS = [
 # Bot configuration model using Pydantic for validation and documentation
 class BotConfig(BaseModel):
     prompt: str = Field("You are a friendly customer service agent", description="System prompt for the bot")
-    voice_id: str = Field("tmXu3zSmE1qTdNsiLHv0", description="Voice ID for Text-to-Speech")
+    roleplay_type: str = Field(description="Enter roleplay type ('customer' or 'sales').")
+    voice_id: str = Field("tmXu3zSmE1qTdNsiLHv0", description="Voice ID for TTS")
     difficulty_level: str = Field("Easy", description="Set difficulty level for the bot")
     session_time: Optional[float] = Field(10, description="Call time in minutes.")
     avatar_name: str = Field("John", description="The name of the avatar")
+    user_id: str = Field(description="The user ID")
 
 # Function to clean up and terminate bot subprocesses
 def cleanup():
