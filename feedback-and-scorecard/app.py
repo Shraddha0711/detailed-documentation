@@ -1,96 +1,85 @@
-# Import required libraries and modules
+# Importing necessary libraries and modules
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from customer_agent import customer_graph  # Import the customer graph logic
-from sales_agent import sales_graph  # Import the sales graph logic
-import uvicorn  # ASGI server to run the FastAPI app
-import firebase_admin  # Firebase admin SDK
-from firebase_admin import credentials, firestore  # Firestore client for database interactions
-import os  # For interacting with environment variables
-import json  # For working with JSON data
-from dotenv import load_dotenv  # Load environment variables from a .env file
+from customer_agent import customer_graph
+from sales_agent import sales_graph
+import uvicorn
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
+import json
+from datetime import datetime
+from dotenv import load_dotenv
 
 # Load environment variables from a .env file
 load_dotenv()
 
-# Initialize Firebase credentials using the provided certificate path
+# Initialize Firebase app with credentials
 cred = credentials.Certificate(os.getenv("CRED_PATH"))
-firebase_admin.initialize_app(cred)  # Initialize the Firebase app
-db = firestore.client()  # Initialize the Firestore database client
+firebase_admin.initialize_app(cred)
+db = firestore.client()  # Initialize Firestore client
 
-# Initialize the FastAPI app
+# Create FastAPI app instance
 app = FastAPI()
 
-# Enable Cross-Origin Resource Sharing (CORS) to allow requests from different origins
+# Enable CORS for the app to allow requests from any origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
+    allow_origins=["*"],  # Allow requests from all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_headers=["*"],  # Allow all HTTP headers
 )
 
-# Configuration for the agents, including unique identifiers
+# Configuration settings for graph processing
 config = {
-    "thread_id": "main",  # Thread ID for tracking requests
+    "thread_id": "main",  # Identifier for the thread
     "checkpoint_ns": "my_namespace",  # Namespace for checkpoints
-    "checkpoint_id": "my_checkpoint",  # Unique checkpoint identifier
+    "checkpoint_id": "my_checkpoint",  # Unique identifier for checkpoint
 }
 
-# Global variable to store the compiled customer graph
+# Global variable to store the compiled graph for customer interactions
 customer_compiled_graph = None
 
+# Function to retrieve and cache the compiled customer graph
 def get_customer_compiled_graph():
-    """
-    Returns the compiled customer graph. If it hasn't been compiled yet,
-    it loads it from the customer_graph module.
-    """
     global customer_compiled_graph
     if customer_compiled_graph is None:
-        customer_compiled_graph = customer_graph  # Load the customer graph if not loaded
+        customer_compiled_graph = customer_graph  # Load the graph if not already loaded
     return customer_compiled_graph
 
-
-# Global variable to store the compiled sales graph
+# Global variable to store the compiled graph for sales interactions
 sales_compiled_graph = None
 
+# Function to retrieve and cache the compiled sales graph
 def get_sales_compiled_graph():
-    """
-    Returns the compiled sales graph. If it hasn't been compiled yet,
-    it loads it from the sales_graph module.
-    """
     global sales_compiled_graph
     if sales_compiled_graph is None:
-        sales_compiled_graph = sales_graph  # Load the sales graph if not loaded
+        sales_compiled_graph = sales_graph  # Load the graph if not already loaded
     return sales_compiled_graph
 
-
-def generate_scorecard(transcript, type):
-    """
-    Generates a scorecard based on the provided transcript and type (customer or sales).
-    The function processes the transcript, invokes the appropriate agent, 
-    and returns a detailed feedback scorecard.
-    """
-    context = ""  # Variable to store system context
-    conversation = []  # List to store conversation entries
-    
-    # Process each entry in the transcript
+# Function to generate a scorecard based on a transcription, prompt type, and other parameters
+def generate_scorecard(transcript, prompt_type, duration, user_id):
+    # Extract context and conversation from the transcription
+    context = ""
+    conversation = []
     for entry in transcript:
         if entry["role"] == "system":
-            context = entry["content"]  # Extract system context
+            context = entry["content"]
         else:
-            conversation.append(f"{entry['role']}: {entry['content']}")  # Append user/system conversation
+            conversation.append(f"{entry['role']}: {entry['content']}")
 
-    # Combine context and conversation into a single formatted transcript
+    # Format the transcript for processing
     formatted_transcript = f"Context:\n{context}\n\nConversation:\n" + "\n".join(conversation)
 
-    # If the type is 'customer', use the customer graph for processing
-    if type == "customer":
+    # Determine the appropriate graph to use based on the prompt type
+    if prompt_type == "customer":
         graph = get_customer_compiled_graph()
         result = graph.invoke({"transcript": formatted_transcript}, config=config)
-        result.pop("transcript")  # Remove the transcript from the result
-        result = {item.split(':', 1)[0].strip(): item.split(':', 1)[1].strip() for item in result['aggregate']}  # Format results
-        # Return detailed scorecard for customer interaction
+        result.pop("transcript")  # Remove transcript from results
+        result = {item.split(':', 1)[0].strip(): item.split(':', 1)[1].strip() for item in result['aggregate']}
+        
+        # Format the result into a structured scorecard
         return {
             "communication_and_delivery": {
                 "empathy_score": result["empathy_score"],
@@ -99,7 +88,7 @@ def generate_scorecard(transcript, type):
                 "listening_score": result["listening_score"],
                 "positive_sentiment_score": result["positive_sentiment_score"],
                 "structure_and_flow": result["structure_and_flow"],
-                "stuttering_words": result["stuttering_words"],
+                "stuttering_words": result["stuttering_words"],   
                 "active_listening_skills": result["active_listening_skills"]
             },
             "customer_interaction_and_resolution": {
@@ -107,7 +96,7 @@ def generate_scorecard(transcript, type):
                 "personalisation_index": result["personalisation_index"],
                 "conflict_management": result["conflict_management"],
                 "response_time": result["response_time"],
-                "customer_satisfaction_score": result["customer_satisfaction_score"],
+                "customer_satisfaction_score": result["customer_satisfiction_score"],
                 "rapport_building": result["rapport_building"],
                 "engagement": result["engagement"]
             },
@@ -124,16 +113,18 @@ def generate_scorecard(transcript, type):
                 "value_proposition": None,
                 "pitch_quality": None
             },
-            "feedback": json.loads(result["feedback"])
+            "feedback": json.loads(result["feedback"]),
+            "duration": duration,
+            "user_id": user_id,
+            "timestamp": datetime.utcnow()
         }
-
-    # If the type is 'sales', use the sales graph for processing
-    elif type == "sales":
+    elif prompt_type == "sales":
         graph = get_sales_compiled_graph()
         result = graph.invoke({"transcript": formatted_transcript}, config=config)
-        result.pop("transcript")
+        result.pop("transcript")  # Remove transcript from results
         result = {item.split(':', 1)[0].strip(): item.split(':', 1)[1].strip() for item in result['aggregate']}
-        # Return detailed scorecard for sales interaction
+        
+        # Format the result into a structured scorecard
         return {
             "communication_and_delivery": {
                 "empathy_score": None,
@@ -167,37 +158,43 @@ def generate_scorecard(transcript, type):
                 "value_proposition": result["value_proposition"],
                 "pitch_quality": result["pitch_quality"]
             },
-            "feedback": json.loads(result["feedback"])
+            "feedback": json.loads(result["feedback"]),
+            "duration": duration,
+            "user_id": user_id,
+            "timestamp": datetime.utcnow()
         }
     else:
         raise ValueError("Invalid type provided")
 
-# Define the FastAPI endpoint to retrieve scorecard based on transcription ID
+# API endpoint to retrieve or generate a scorecard for a transcription
 @app.post("/get_scorecard")
 async def get_transcription(room_id: str):
     try:
-        # Check if feedback already exists in Firestore
+        # Check if feedback already exists in the 'feedback' collection
         feedback_doc_ref = db.collection(u'feedback').document(room_id)
         feedback_doc = feedback_doc_ref.get()
         
         if feedback_doc.exists:
-            # If feedback exists, return the existing feedback
+            # Return existing feedback
             return feedback_doc.to_dict()
         else:
-            # Retrieve the transcription document from Firestore
+            # Retrieve transcription document from Firestore
             doc_ref = db.collection(u'Transcription').document(room_id)
             doc = doc_ref.get()
-            
-            if doc.exists:
-                transcript = doc.to_dict()["transcript"]
-                type = doc.to_dict()["type"]
 
-                # Ensure the type is valid (either customer or sales)
-                if type in ["customer", "sales"]:
-                    # Generate feedback based on the transcript and type
-                    feedback = generate_scorecard(transcript, type)
+            if doc.exists:
+                doc_data = doc.to_dict()
+                transcript = doc_data["transcript"]
+                prompt_type = doc_data["type"]
+                duration = doc_data.get("call_duration", None)  # Default to None if not present
+                user_id = doc_data.get("user_id", None)  # Default to None if not present
+
+                # Validate the prompt type
+                if prompt_type in ["customer", "sales"]:
+                    # Generate feedback scorecard
+                    feedback = generate_scorecard(transcript, prompt_type, duration, user_id)
                     
-                    # Store the feedback in Firestore for future reference
+                    # Store feedback in Firestore 'feedback' collection
                     feedback_doc_ref.set(feedback)
                     
                     # Return the generated feedback
@@ -205,18 +202,18 @@ async def get_transcription(room_id: str):
                 else:
                     return {"error": "Invalid type"}    
             else:
-                # If transcription is not found, raise 404 error
+                # Handle case when transcription is not found
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Transcription not found"
                 )
     except Exception as e:
-        # If there's an error, return a 500 Internal Server Error
+        # Handle server-side exceptions
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve transcription: {str(e)}"
         )
 
-# Run the FastAPI application using uvicorn
+# Entry point to run the FastAPI app
 if __name__ == "__main__":
-    uvicorn.run(app, port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
