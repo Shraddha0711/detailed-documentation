@@ -6,6 +6,7 @@ import base64
 import wave
 import argparse
 import asyncio
+from datetime import datetime
 from typing import Dict
 from urllib.parse import urlparse
 import firebase_admin
@@ -21,66 +22,55 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.services.cartesia import CartesiaTTSService
+from pipecat.services.azure import AzureLLMService, AzureSTTService, AzureTTSService, Language
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport, DailyTranscriptionSettings
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv(override=True)
 
-# Setup logger for debugging and information logging
+# Setup logger
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
-# Firebase initialization for storing transcription data
-FILES_DIR = "saved_files"  # Directory to save audio files (create this empty folder in your working directory) 
-cred = credentials.Certificate(os.getenv("CRED_PATH"))  # Firebase credentials path
-firebase_admin.initialize_app(cred)  # Initialize Firebase app
-db = firestore.client()  # Firestore client for database interactions
+# Firebase initialization
+FILES_DIR = "saved_files"
+cred = credentials.Certificate(os.getenv("CRED_PATH"))
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
-# Function to save transcription data into Firebase
-async def save_in_db(room_id: str, transcript: str):
-    """
-    Saves the transcription data to Firebase Firestore under the 'Transcription' collection.
-    The room ID and prompt type are also extracted from the transcript for storage.
-    """
+# Variable to store the start time
+start_time = None
+
+# Save transcription data to Firebase
+async def save_in_db(room_id: str, transcript: str,prompt_type:str, user_id:str, duration: str):
     doc_ref = db.collection("Transcription").document(room_id)
-    # Extracting the prompt type from the system message
-    prompt_type = next((msg['content'].split(':')[-1].strip() for msg in transcript if msg.get('role') == 'system' and 'prompt_type' in msg['content']), None)
-    # Clean the transcription data
-    transcription = re.sub(r'\.?\s*prompt_type:[a-zA-Z]+$', '', transcript[0]['content'])
-    data = {"transcript": transcription, "type": prompt_type}
+    data = {"transcript": transcript, "type": prompt_type, "user_id": user_id, "timestamp": datetime.utcnow(), "call_duration": duration}
     doc_ref.set(data)
     logger.info(f"Transcription saved successfully for room: {room_id}")
 
-# Function to save audio buffer as a WAV file
+# Save audio buffer as a WAV file
 async def save_audio(audiobuffer, room_url: str):
-    """
-    Merges the audio buffers and saves the resulting audio as a WAV file.
-    The file is saved in the 'saved_files' directory with a name derived from the room URL.
-    """
-    if audiobuffer.has_audio():  # Check if the audio buffer contains data
-        merged_audio = audiobuffer.merge_audio_buffers()  # Merge all audio buffers
-        filename = os.path.join(FILES_DIR, f"audio_{(urlparse(room_url).path).removeprefix('/')}.wav")  # Create filename from room URL
+    if audiobuffer.has_audio():
+        merged_audio = audiobuffer.merge_audio_buffers()
+        filename = os.path.join(FILES_DIR, f"audio_{(urlparse(room_url).path).removeprefix('/')}.wav")
         with wave.open(filename, "wb") as wf:
-            wf.setnchannels(2)  # Set number of channels (stereo)
-            wf.setsampwidth(2)  # Set sample width (2 bytes)
-            wf.setframerate(audiobuffer._sample_rate)  # Set the sample rate of the audio
-            wf.writeframes(merged_audio)  # Write the audio data to the file
+            wf.setnchannels(2)
+            wf.setsampwidth(2)
+            wf.setframerate(audiobuffer._sample_rate)
+            wf.writeframes(merged_audio)
         logger.info(f"Merged audio saved to {filename}")
     else:
-        logger.warning("No audio data to save")  # Log a warning if there's no audio data
+        logger.warning("No audio data to save")
 
-# Main execution function for handling room interactions
+
+# Main execution function
 async def main(room_url: str, token: str, config_b64: str):
-    """
-    Main function that orchestrates the setup, configuration, and interaction with the daily transport and processing pipeline.
-    It manages audio, transcription, and chatbot context flow.
-    """
-    # Decode and parse the configuration data from base64
-    config_str = base64.b64decode(config_b64).decode()  # Decode the base64 config string
-    config = json.loads(config_str)  # Convert the decoded string into a dictionary
+    # Decode the configuration
+    config_str = base64.b64decode(config_b64).decode()
+    config = json.loads(config_str)
 
-    # Initialize Daily transport (handles real-time communication and transcription)
+    # Initialize Daily transport
     transport = DailyTransport(
         room_url,
         token,
@@ -89,78 +79,93 @@ async def main(room_url: str, token: str, config_b64: str):
             audio_out_enabled=True,
             audio_in_enabled=True,
             camera_out_enabled=False,
-            vad_enabled=True,  # Voice Activity Detection enabled
+            vad_enabled=True,
             vad_audio_passthrough=True,
-            vad_analyzer=SileroVADAnalyzer(),  # Use Silero VAD model for speech detection
+            vad_analyzer=SileroVADAnalyzer(),
             transcription_enabled=True,
-            transcription_settings=DailyTranscriptionSettings(language="en", tier="nova", model="2-general")  # Configure transcription settings
+            transcription_settings=DailyTranscriptionSettings(language="en", tier="nova", model="2-general")
         ),
     )
 
-    # Initialize Text-to-Speech (TTS) and Language Model (LLM) services
-    tts = ElevenLabsTTSService(api_key=os.getenv("ELEVENLABS_API_KEY"), voice_id=config['voice_id'])  # TTS service for speech synthesis
-    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), model="gpt-4o")  # OpenAI LLM service for natural language processing
+    # TTS parameters setup
+    # tts_params = CartesiaTTSService.InputParams(speed="normal", emotion=["positivity:high", "curiosity"])
 
-    # Initial chatbot messages to set up context
-    messages = [{"role": "system", "content": config['prompt']}]  # System-level message to configure bot's behavior
+    # Initialize TTS service and LLM service
+    # tts = ElevenLabsTTSService(api_key=os.getenv("ELEVENLABS_API_KEY"), voice_id=config['voice_id'])
 
-    # Initialize context for the OpenAI LLM and aggregator for context updates
+    tts_service = AzureTTSService(
+        api_key=os.getenv("AZURE_API_KEY"),
+        region=os.getenv("AZURE_REGION"),
+        voice=os.getenv("AZURE_VOICE_ID"),
+        params=AzureTTSService.InputParams(
+            language=os.getenv("AZURE_LANG")
+        )
+    )
+    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"), model="gpt-4o")
+
+    # Initial messages for the chatbot
+    messages = [{"role": "system", "content": config['prompt']}]
+
+    # Initialize context and pipeline components
     context = OpenAILLMContext(messages)
     context_aggregator = llm.create_context_aggregator(context)
-    audiobuffer = AudioBufferProcessor()  # Audio processing buffer for handling audio data
+    audiobuffer = AudioBufferProcessor()
 
-    # Create pipeline of steps that handle data flow: input, processing, output
+    # Create pipeline
     pipeline = Pipeline([
-        transport.input(),  # Input handler for transport data
-        context_aggregator.user(),  # User-side context aggregation
-        llm,  # Process input via LLM
-        tts,  # Convert text to speech
-        transport.output(),  # Output handler for transport data
-        audiobuffer,  # Audio buffer processing
-        context_aggregator.assistant(),  # Assistant-side context aggregation
+        transport.input(),
+        context_aggregator.user(),
+        llm,
+        tts_service,
+        transport.output(),
+        audiobuffer,
+        context_aggregator.assistant(),
     ])
 
-    # Setup and run the pipeline task
+    # Initialize pipeline task
     task = PipelineTask(pipeline, PipelineParams(allow_interruptions=True))
+    user_id = config["user_id"]
+    roleplay_type = config["roleplay_type"]
 
-    # Event handler when the first participant joins the room
+    # Event handler when first participant joins
     @transport.event_handler("on_first_participant_joined")
     async def on_first_participant_joined(transport, participant):
-        """
-        This function is triggered when the first participant joins the room.
-        It starts capturing transcription data and queues the initial chatbot messages.
-        """
+        global start_time
+        start_time = datetime.utcnow()  # Record the start time
         await transport.capture_participant_transcription(participant["id"])
-        await task.queue_frames([LLMMessagesFrame(messages)])  # Send initial system messages
+        await task.queue_frames([LLMMessagesFrame(messages)])
         logger.info(f"First participant joined: {participant['id']}")
 
-    # Event handler when a participant leaves the room
+    # Event handler when participant leaves
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant, reason):
-        """
-        This function is triggered when a participant leaves the room.
-        It saves the audio and transcription data and ends the pipeline task.
-        """
+        global start_time
         participant_id = participant['id']
         logger.info(f"Participant left: {participant_id}")
+        # Calculate call duration
+        end_time = datetime.utcnow()  # Record the end time
+        if start_time:
+            duration = end_time - start_time  # Calculate duration as a timedelta
+            duration_str = str(duration)  # Convert duration to a readable string
+            logger.info(f"Call duration: {duration_str}")
+        else:
+            duration_str = "Unknown"  # Handle cases where start time wasn't recorded
 
-        # Save the audio and transcription, then finalize the task
+        # Save audio and transcription data, then end the pipeline task
         await save_audio(audiobuffer, room_url)
-        await save_in_db((urlparse(room_url).path).removeprefix('/'), context.get_messages())  # Save transcription to database
-        await task.queue_frame(EndFrame())  # End the pipeline task
+        await save_in_db(room_id=(urlparse(room_url).path).removeprefix('/'),transcript= context.get_messages(),prompt_type = roleplay_type, user_id=user_id, duration=duration_str)
+        await task.queue_frame(EndFrame())
 
-    # Run the pipeline task asynchronously
+    # Run the pipeline task
     runner = PipelineRunner()
     await runner.run(task)
 
-# Main entry point for running the script
+# Main entry point
 if __name__ == "__main__":
-    # Set up command-line argument parsing
     parser = argparse.ArgumentParser(description="Pipecat Bot")
-    parser.add_argument("-u", required=True, type=str, help="Room URL")  # Room URL to connect to
-    parser.add_argument("-t", required=True, type=str, help="Token")  # Access token for authentication
-    parser.add_argument("--config", required=True, help="Base64 encoded configuration")  # Base64 encoded configuration
+    parser.add_argument("-u", required=True, type=str, help="Room URL")
+    parser.add_argument("-t", required=True, type=str, help="Token")
+    parser.add_argument("--config", required=True, help="Base64 encoded configuration")
     args = parser.parse_args()
 
-    # Start the main function asynchronously
     asyncio.run(main(args.u, args.t, args.config))
